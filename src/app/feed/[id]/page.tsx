@@ -1,13 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
 import VideoCard from "@/components/VideoCard";
-import CategoryChips from "@/components/CategoryChips";
-import { categories, Video } from "@/data/mockVideos";
+import { Video } from "@/data/mockVideos";
 import { useInView } from "react-intersection-observer";
 
-export default function HomePage() {
-  const [activeCategory, setActiveCategory] = useState("All");
+// specific categories like subscriptions and history that we don't have API data for 
+const MockPages = ["subscriptions", "history", "playlists", "watch-later", "liked", "downloads", "settings", "report", "help"];
+
+export default function FeedPage() {
+  const params = useParams();
+  const idValue = Array.isArray(params.id) ? params.id[0] : params.id;
+  const id = idValue || "";
+  
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -17,33 +23,32 @@ export default function HomePage() {
     threshold: 0,
   });
 
-  const fetchVideos = useCallback(async (token: string | null = null, category: string = "All") => {
+  const isMockPage = MockPages.includes(id);
+
+  const fetchVideos = useCallback(async (token: string | null = null) => {
+    if (isMockPage) {
+       setLoading(false);
+       return;
+    }
+
     if (token) {
       setLoadingMore(true);
     } else {
       setLoading(true);
-      setVideos([]); // reset
+      setVideos([]);
     }
 
     try {
-      let url = `/api/videos`;
-      const params = new URLSearchParams();
-      if (category !== "All") {
-        params.append("q", category);
-      }
+      let url = `/api/videos?q=${encodeURIComponent(id)}`;
       if (token) {
-        params.append("pageToken", token);
+        url += `&pageToken=${token}`;
       }
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-
+      
       const res = await fetch(url);
       const data = await res.json();
       
       if (data.videos) {
         setVideos((prev) => {
-           // Prevent duplicates by checking IDs
            if (!token) return data.videos;
            const existingIds = new Set(prev.map(v => v.id));
            const newVideos = data.videos.filter((v: Video) => !existingIds.has(v.id));
@@ -57,28 +62,34 @@ export default function HomePage() {
       if (token) setLoadingMore(false);
       else setLoading(false);
     }
-  }, []);
+  }, [id, isMockPage]);
 
-  // Initial fetch and on category change
+  // Initial fetch
   useEffect(() => {
-    fetchVideos(null, activeCategory);
-  }, [activeCategory, fetchVideos]);
+    fetchVideos(null);
+  }, [fetchVideos]);
 
   // Load more when scrolled to bottom
   useEffect(() => {
     if (inView && !loading && !loadingMore && nextPageToken) {
-      fetchVideos(nextPageToken, activeCategory);
+      fetchVideos(nextPageToken);
     }
-  }, [inView, loading, loadingMore, nextPageToken, activeCategory, fetchVideos]);
+  }, [inView, loading, loadingMore, nextPageToken, fetchVideos]);
+
+
+  if (isMockPage) {
+    return (
+      <div className="flex h-[50vh] flex-col items-center justify-center px-4">
+        <h2 className="text-2xl font-semibold capitalize mb-2">{id.replace('-', ' ')}</h2>
+        <p className="text-muted-foreground">Sign in to complete your {id.replace('-', ' ')} functionality. (OAuth Mocked)</p>
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 md:px-6">
-      <CategoryChips
-        categories={categories}
-        activeCategory={activeCategory}
-        onCategoryChange={setActiveCategory}
-      />
-
+      <h2 className="mb-6 text-xl font-bold capitalize">{id} Videos</h2>
+      
       <div className="grid gap-4 pb-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {videos.map((video, index) => (
           <div key={`${video.id}-${index}`} style={{ animationDelay: `${(index % 12) * 50}ms` }}>
@@ -99,15 +110,6 @@ export default function HomePage() {
           {loadingMore && (
              <div className="h-8 w-8 animate-spin rounded-full border-4 border-yt-red border-t-transparent"></div>
           )}
-        </div>
-      )}
-
-      {!loading && videos.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20">
-          <p className="text-lg text-muted-foreground">No videos found</p>
-          <p className="text-sm text-muted-foreground">
-            Try refreshing the page or check API connection
-          </p>
         </div>
       )}
     </div>

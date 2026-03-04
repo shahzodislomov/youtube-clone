@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import VideoCard from "@/components/VideoCard";
-import CategoryChips from "@/components/CategoryChips";
-import { categories, Video } from "@/data/mockVideos";
+import { Video } from "@/data/mockVideos";
 import { useInView } from "react-intersection-observer";
 
-export default function HomePage() {
-  const [activeCategory, setActiveCategory] = useState("All");
+function SearchContent() {
+  const searchParams = useSearchParams();
+  const query = searchParams.get("q") || "";
+  
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -17,33 +19,30 @@ export default function HomePage() {
     threshold: 0,
   });
 
-  const fetchVideos = useCallback(async (token: string | null = null, category: string = "All") => {
+  const fetchVideos = useCallback(async (token: string | null = null) => {
+    if (!query) {
+       setLoading(false);
+       return;
+    }
+
     if (token) {
       setLoadingMore(true);
     } else {
       setLoading(true);
-      setVideos([]); // reset
+      setVideos([]);
     }
 
     try {
-      let url = `/api/videos`;
-      const params = new URLSearchParams();
-      if (category !== "All") {
-        params.append("q", category);
-      }
+      let url = `/api/videos?q=${encodeURIComponent(query)}`;
       if (token) {
-        params.append("pageToken", token);
+        url += `&pageToken=${token}`;
       }
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-
+      
       const res = await fetch(url);
       const data = await res.json();
       
       if (data.videos) {
         setVideos((prev) => {
-           // Prevent duplicates by checking IDs
            if (!token) return data.videos;
            const existingIds = new Set(prev.map(v => v.id));
            const newVideos = data.videos.filter((v: Video) => !existingIds.has(v.id));
@@ -57,29 +56,25 @@ export default function HomePage() {
       if (token) setLoadingMore(false);
       else setLoading(false);
     }
-  }, []);
+  }, [query]);
 
-  // Initial fetch and on category change
+  // Initial fetch
   useEffect(() => {
-    fetchVideos(null, activeCategory);
-  }, [activeCategory, fetchVideos]);
+    fetchVideos(null);
+  }, [fetchVideos]);
 
   // Load more when scrolled to bottom
   useEffect(() => {
     if (inView && !loading && !loadingMore && nextPageToken) {
-      fetchVideos(nextPageToken, activeCategory);
+      fetchVideos(nextPageToken);
     }
-  }, [inView, loading, loadingMore, nextPageToken, activeCategory, fetchVideos]);
+  }, [inView, loading, loadingMore, nextPageToken, fetchVideos]);
 
   return (
-    <div className="px-4 md:px-6">
-      <CategoryChips
-        categories={categories}
-        activeCategory={activeCategory}
-        onCategoryChange={setActiveCategory}
-      />
-
-      <div className="grid gap-4 pb-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+    <div className="px-4 md:px-6 max-w-[1280px] mx-auto">
+      <h2 className="mb-6 text-xl font-bold">Search results for "{query}"</h2>
+      
+      <div className="grid gap-4 pb-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {videos.map((video, index) => (
           <div key={`${video.id}-${index}`} style={{ animationDelay: `${(index % 12) * 50}ms` }}>
             <VideoCard video={video} />
@@ -88,9 +83,9 @@ export default function HomePage() {
       </div>
 
       {loading && (
-        <div className="flex flex-col items-center justify-center py-20">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-yt-red border-t-transparent"></div>
-        </div>
+         <div className="flex flex-col items-center justify-center py-20">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-yt-red border-t-transparent"></div>
+         </div>
       )}
 
       {/* Infinite scroll trigger */}
@@ -101,15 +96,18 @@ export default function HomePage() {
           )}
         </div>
       )}
-
-      {!loading && videos.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20">
-          <p className="text-lg text-muted-foreground">No videos found</p>
-          <p className="text-sm text-muted-foreground">
-            Try refreshing the page or check API connection
-          </p>
-        </div>
-      )}
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-yt-red border-t-transparent"></div>
+      </div>
+    }>
+      <SearchContent />
+    </Suspense>
   );
 }
