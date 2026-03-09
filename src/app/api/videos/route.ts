@@ -93,25 +93,33 @@ export async function GET(request: Request) {
     const res = await fetch(endpoint);
     const data = await res.json();
     
+    if (!res.ok) {
+      console.error("YouTube API Response Error:", data);
+      return NextResponse.json({ 
+        error: "YouTube API Error", 
+        details: data.error?.message || "Unknown error" 
+      }, { status: res.status });
+    }
+
     // Fallback to data.nextPageToken if it was a direct videos call (mostPopular)
     const nextPageToken = (request as any).nextPageToken || data.nextPageToken || null;
 
     const formattedVideos: Video[] = (data.items || []).map((item: any) => ({
-      id: item.id,
-      title: item.snippet.title,
-      thumbnail: item.snippet.thumbnails.maxres?.url || item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url,
+      id: item.id?.videoId || item.id,
+      title: item.snippet?.title || "No Title",
+      thumbnail: item.snippet?.thumbnails?.maxres?.url || item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
       channel: {
-        id: item.snippet.channelId,
-        name: item.snippet.channelTitle,
-        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.snippet.channelTitle)}`,
-        verified: parseInt(item.statistics.subscriberCount || "0") > 100000,
+        id: item.snippet?.channelId || "",
+        name: item.snippet?.channelTitle || "Unknown Channel",
+        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(item.snippet?.channelTitle || "Unknown")}`,
+        verified: parseInt(item.statistics?.subscriberCount || "0") > 100000,
       },
-      views: formatViews(item.statistics.viewCount),
-      uploadedAt: timeAgo(item.snippet.publishedAt),
-      duration: formatDuration(item.contentDetails.duration),
-      description: item.snippet.description,
+      views: item.statistics?.viewCount ? formatViews(item.statistics.viewCount) : "0 views",
+      uploadedAt: item.snippet?.publishedAt ? timeAgo(item.snippet.publishedAt) : "Unknown date",
+      duration: item.contentDetails?.duration ? formatDuration(item.contentDetails.duration) : "0:00",
+      description: item.snippet?.description || "",
       // For playing the video inline, we use the YouTube embed URL
-      videoUrl: `https://www.youtube.com/embed/${item.id}?autoplay=1`
+      videoUrl: `https://www.youtube.com/embed/${item.id?.videoId || item.id}?autoplay=1`
     }));
 
     return NextResponse.json({ videos: formattedVideos, nextPageToken });
