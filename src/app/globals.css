@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
-@config "../../tailwind.config.ts";
+@config "../../tailwind.config.mts";
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
